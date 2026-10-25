@@ -46,6 +46,7 @@ class Snapshot:
     total: pd.DataFrame
     oficial: Resultado | None  # total do Brasil divulgado pelo TSE
     stats: dict = field(default_factory=dict)
+    versao: int = 0  # cresce a cada projeção nova; a tela só é redesenhada quando muda
 
 
 class Coletor:
@@ -66,6 +67,8 @@ class Coletor:
         self.snapshot: Snapshot | None = None
         self.erro: str | None = None
         self.rodando = False
+        self.ultima_atualizacao: datetime | None = None  # último dado recebido com sucesso
+        self._versao = 0
 
         self._arquivo_hist = None
         if pasta_dados is not None and config.ambiente != "demo":
@@ -76,13 +79,21 @@ class Coletor:
         self._parar = threading.Event()
         self._acordar = threading.Event()
         self._thread: threading.Thread | None = None
+        self._lock_thread = threading.Lock()
 
     # ---- ciclo de vida -------------------------------------------------------------------
 
     def iniciar(self) -> None:
-        self._thread = threading.Thread(target=lambda: asyncio.run(self._laco()), daemon=True,
-                                        name=f"coletor-{self.config.ambiente}")
-        self._thread.start()
+        """Inicia a coleta. Pode ser chamado sempre: se a thread estiver viva não faz nada, e se
+        tiver morrido (erro inesperado) sobe outra, mantendo o estado já coletado."""
+        with self._lock_thread:
+            if self._thread is not None:
+                if self._thread.is_alive():
+                    return
+                log.error("a thread de coleta tinha parado; reiniciando")
+            self._thread = threading.Thread(target=lambda: asyncio.run(self._laco()),
+                                            daemon=True, name=f"coletor-{self.config.ambiente}")
+            self._thread.start()
 
     def parar(self) -> None:
         self._parar.set()
@@ -104,6 +115,7 @@ class Coletor:
                 try:
                     await self.rodada(cli)
                     self.erro = None
+                    self.ultima_atualizacao = agora()
                 except Exception as exc:  # a coleta não pode morrer por uma rodada ruim
                     log.exception("falha na rodada")
                     self.erro = f"{type(exc).__name__}: {exc}"
@@ -197,6 +209,7 @@ class Coletor:
                     parcial.stats = dict(stats, duracao_s=time.perf_counter() - t0,
                                          fim=agora(), acompanhamento=acomp, parcial=True)
                     self.snapshot = parcial
+                    self.ultima_atualizacao = agora()
             await tarefa
 
             stats["requisicoes"] = len(alvos) + len(totais) + 1
@@ -237,6 +250,7 @@ class Coletor:
         df[num] = df[num].fillna(0).astype("int64")
 
         proj = projecao.projetar(df, cand, fallback=self.config.fallback)
+        self._versao += 1
         por_mun = projecao.resumir(df, proj, cand, ["uf", "mun"])
         por_mun.insert(0, "municipio", [self.nomes_mun.get(i, i[1]) for i in por_mun.index])
         return Snapshot(
@@ -250,6 +264,7 @@ class Coletor:
             por_uf=projecao.resumir(df, proj, cand, ["uf"]),
             total=projecao.resumir(df, proj, cand, []),
             oficial=self._estado.get(("br", "", ""), (None, None))[1],
+            versao=self._versao,
             stats=stats,
         )
 

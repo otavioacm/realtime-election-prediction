@@ -50,6 +50,11 @@ viram 725 zonas). Com 8 requisições simultâneas em HTTP/2, ~70 s. Para não d
   a UF inteira é pulada;
 - unidades maiores primeiro, e a projeção parcial é publicada a cada 10 s durante a rodada.
 
+Na tela, cada visitante confere a cada 5 s se há projeção nova e só redesenha a página quando
+há (~10 KB/min por pessoa sem mudança). Se o TSE ficar 4 min sem dado novo aparece um aviso,
+e se a coleta morrer ela é religada na próxima conferência. As fotos são servidas por
+`static/` e ficam no cache do navegador.
+
 O histórico de projeções vai para `data/historico-<fonte>.csv` e é recarregado ao reiniciar.
 
 ## Código

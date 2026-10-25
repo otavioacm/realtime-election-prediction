@@ -4,25 +4,23 @@ Painel só de visualização, pensado para celular. A fonte é o TSE oficial; pa
 ELEICAO_AMBIENTE=demo.
 """
 
-import base64
-import io
 import time
 import unicodedata
-from pathlib import Path
+from datetime import timedelta
 
 import altair as alt
 import pandas as pd
 import streamlit as st
-from PIL import Image
 
 from eleicao.coletor import Coletor, Snapshot
-from eleicao.config import Config
+from eleicao.config import Config, agora
 
-RAIZ = Path(__file__).parent
 CORES = {"13": "#d62828", "22": "#1d4e9e"}  # Lula vermelho, Flávio azul escuro
-FOTOS = {"13": RAIZ / "fotos" / "lula.jpeg", "22": RAIZ / "fotos" / "flavio.jpg"}
+# servidas por static/ (enableStaticServing): o navegador baixa uma vez e guarda
+FOTOS = {"13": "./app/static/lula.jpg", "22": "./app/static/flavio.jpg"}
 CINZA = "#8a8984"
-ATUALIZA_S = 10
+VIGIA_S = 5  # de quanto em quanto tempo cada tela confere se há projeção nova
+SEM_DADOS = timedelta(minutes=4)  # sem dado novo do TSE por mais que isso, avisa na tela
 
 st.set_page_config(page_title="Projeção 2º turno 2026", page_icon="🗳️", layout="centered",
                    initial_sidebar_state="collapsed")
@@ -37,21 +35,6 @@ def coletor() -> Coletor:
     while not c.nomes_uf and c.erro is None and time.monotonic() < limite:
         time.sleep(0.2)
     return c
-
-
-@st.cache_data
-def foto(n: str) -> str:
-    """Foto recortada em quadrado (pelo topo) e reduzida, para pesar pouco no celular."""
-    caminho = FOTOS.get(n)
-    if caminho is None or not caminho.exists():
-        return ""
-    img = Image.open(caminho).convert("RGB")
-    lado = min(img.size)
-    img = img.crop(((img.width - lado) // 2, 0, (img.width + lado) // 2, lado))
-    img.thumbnail((180, 180))
-    buf = io.BytesIO()
-    img.save(buf, "JPEG", quality=82)
-    return "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode()
 
 
 def votos(v: float) -> str:
@@ -138,10 +121,10 @@ st.markdown("""
 
 def card(snap: Snapshot, linha: pd.Series, n: str, lider: bool) -> str:
     proj, apu = linha[f"{n}_proj_pct"], linha[f"{n}_pct"]
-    img = foto(n)
+    img = FOTOS.get(n)
     return f"""
 <div class="cand" style="--cor:{CORES.get(n, CINZA)}; --p:{0 if pd.isna(proj) else proj:.2f}%">
-  <div class="anel">{f'<img src="{img}" alt="">' if img else ''}</div>
+  <div class="anel">{f'<img src="{img}" alt="" width="108" height="108">' if img else ''}</div>
   <div class="nome">{snap.nomes.get(n, n)}</div>
   <div class="partido">{snap.partidos.get(n, "")} · {n}</div>
   <div class="rot">Projeção</div>
@@ -171,8 +154,6 @@ def topo(snap: Snapshot, linha: pd.Series) -> str:
         rodape = '<div class="frente">Divulgação dos resultados a partir das 17h (Brasília).</div>'
 
     return f"""
-<div class="status"><span class="aovivo"><i></i>AO VIVO</span>
-  atualizado às {snap.stats['fim']:%H:%M:%S}</div>
 <div class="secoes">
   <div class="secoes-lin"><span>Seções totalizadas</span><b>{pct(secoes)}</b></div>
   <div class="barra"><div style="width:{secoes:.2f}%"></div></div>
@@ -248,29 +229,29 @@ def grafico(c: Coletor, snap: Snapshot) -> None:
 st.markdown('<div class="titulo">Presidente · 2º turno 2026</div>', unsafe_allow_html=True)
 
 
-@st.fragment(run_every=ATUALIZA_S)
-def painel(c: Coletor) -> None:
+@st.fragment(run_every=VIGIA_S)
+def vigia(c: Coletor, versao_exibida: int | None) -> None:
+    """Roda sozinho a cada VIGIA_S s, sem redesenhar o resto da página.
+
+    Mostra que o painel está vivo, avisa se o TSE parou de mandar dados, religa a coleta se
+    ela tiver morrido e, quando há projeção nova, redesenha a página inteira.
+    """
+    c.iniciar()  # não faz nada se a coleta estiver rodando
     snap = c.snapshot
-    if snap is None:
-        if c.erro:
-            st.error("Não foi possível ler os dados do TSE agora. Tentando de novo…")
-        else:
-            st.info("Carregando os dados do TSE. A primeira leitura leva cerca de 1 minuto.")
+    if (snap.versao if snap else None) != versao_exibida:
+        st.rerun()
+    ultima = c.ultima_atualizacao
+    if ultima is None:
         return
-    linha = snap.total.iloc[0]
-    st.markdown(topo(snap, linha), unsafe_allow_html=True)
-    aviso_confiabilidade(snap.unidades)
-    st.markdown("#### Evolução")
-    grafico(c, snap)
-    if c.erro:
-        st.caption("⚠️ A última leitura do TSE falhou; exibindo a anterior.")
+    if agora() - ultima > SEM_DADOS:
+        st.warning(f"Sem novos dados do TSE desde {ultima:%H:%M:%S}. Os números podem estar "
+                   "desatualizados; tentando de novo.", icon="⚠️")
+    else:
+        st.markdown(f'<div class="status"><span class="aovivo"><i></i>AO VIVO</span>'
+                    f"atualizado às {ultima:%H:%M:%S}</div>", unsafe_allow_html=True)
 
 
-@st.fragment(run_every=ATUALIZA_S)
-def tabela(c: Coletor) -> None:
-    snap = c.snapshot
-    if snap is None:
-        return
+def tabela(c: Coletor, snap: Snapshot) -> None:
     uf = st.session_state.get("uf", "todas")
     busca = sem_acento(st.session_state.get("busca", "").strip())
 
@@ -317,7 +298,19 @@ def tabela(c: Coletor) -> None:
 
 
 c = coletor()
-painel(c)
+snap = c.snapshot
+vigia(c, snap.versao if snap else None)
+if snap is None:
+    if c.erro:
+        st.error("Não foi possível ler os dados do TSE agora. Tentando de novo…")
+    else:
+        st.info("Carregando os dados do TSE. A primeira leitura leva cerca de 1 minuto.")
+    st.stop()
+
+st.markdown(topo(snap, snap.total.iloc[0]), unsafe_allow_html=True)
+aviso_confiabilidade(snap.unidades)
+st.markdown("#### Evolução")
+grafico(c, snap)
 
 st.markdown("#### Por estado e município")
 st.caption("Em cada célula: % apurado → % projetado. Em destaque, quem lidera a projeção.")
@@ -326,7 +319,7 @@ st.selectbox("Estado", ["todas"] + ufs, key="uf",
              format_func=lambda u: "Todos os estados" if u == "todas"
              else f"{titulo(c.nomes_uf[u])} ({u.upper()})")
 st.text_input("Buscar município", key="busca", placeholder="Ex.: Campinas")
-tabela(c)
+tabela(c, snap)
 
 with st.expander("Como a projeção é calculada"):
     st.markdown("""

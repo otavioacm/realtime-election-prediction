@@ -9,7 +9,6 @@ dependencies = [
     "streamlit (>=1.50,<2)",
     "httpx[http2] (>=0.28,<1)",
     "pandas (>=2.2,<3)",
-    "pillow (>=10)",
     "tzdata (>=2024.1)",
 ]
 

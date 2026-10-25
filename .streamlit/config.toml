@@ -10,3 +10,6 @@ showSidebarNavigation = false
 
 [browser]
 gatherUsageStats = false
+
+[server]
+enableStaticServing = true

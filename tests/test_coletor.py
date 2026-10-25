@@ -54,3 +54,32 @@ def test_historico_registra_apenas_rodadas_com_apuracao_nova():
     # t=0: nada apurado; 2º t=50: só 304
     c, _, _ = rodar(True, [0, 50, 50, 100])
     assert len(c.historico) == 2 * 2  # 2 rodadas com mudança × 2 candidatos
+
+
+def test_versao_so_muda_com_dado_novo():
+    _, _, snaps = rodar(True, [10, 50, 50])  # a 3ª rodada só recebe 304
+    assert snaps[1].versao > snaps[0].versao
+    assert snaps[2].versao == snaps[1].versao
+
+
+def test_iniciar_religa_a_coleta_se_a_thread_morreu():
+    import threading
+
+    c = Coletor(Config(ambiente="demo"), transport=TransporteDemo(Config(ambiente="demo")),
+                pasta_dados=None)
+    execucoes, segurar = [], threading.Event()
+
+    async def laco_falso():
+        execucoes.append(1)
+        segurar.wait(5)
+
+    c._laco = laco_falso
+    c.iniciar()
+    c.iniciar()  # thread viva: não sobe outra
+    segurar.set()
+    c._thread.join(5)
+    assert len(execucoes) == 1
+
+    c.iniciar()  # thread morta: sobe outra
+    c._thread.join(5)
+    assert len(execucoes) == 2
