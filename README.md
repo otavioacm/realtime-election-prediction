@@ -68,6 +68,14 @@ O histórico de projeções vai para `data/historico-<fonte>.csv` e é recarrega
    arquivo `app.py`. Em **Advanced settings**, Python 3.13.
 3. O Cloud instala o `requirements.txt` (que instala este pacote) e lê `.streamlit/config.toml`.
 
+**Atualizações:** cada push na `main` é publicado automaticamente em ~1 minuto, sem deploy manual.
+- `app.py` (visual): entra sozinho; quem estiver com a página aberta vê na próxima atualização.
+- `src/eleicao/` (coleta/projeção): a coleta roda numa thread iniciada uma vez, então é
+  preciso **Reboot app** no menu *Manage app* do Cloud. O reboot zera o histórico do gráfico.
+- `requirements.txt`/`pyproject.toml`: o Cloud reinstala e reinicia sozinho.
+
+O Cloud não roda os testes: rode `poetry run pytest` antes do push.
+
 Todas as pessoas que abrem o link compartilham uma única coleta no servidor, então o número
 de acessos não aumenta as requisições ao TSE. O histórico do gráfico (`data/`) se perde se o
 app reiniciar.

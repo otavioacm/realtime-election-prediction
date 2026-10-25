@@ -23,7 +23,7 @@ import httpx
 import pandas as pd
 
 from . import projecao
-from .config import Config
+from .config import Config, agora
 from .parse import Resultado, candidatos, parse_acompanhamento, parse_resultado
 
 log = logging.getLogger(__name__)
@@ -195,7 +195,7 @@ class Coletor:
                 if stats[200] > vistos and (parcial := self._calcular(stats)) is not None:
                     vistos = stats[200]
                     parcial.stats = dict(stats, duracao_s=time.perf_counter() - t0,
-                                         fim=datetime.now(), acompanhamento=acomp, parcial=True)
+                                         fim=agora(), acompanhamento=acomp, parcial=True)
                     self.snapshot = parcial
             await tarefa
 
@@ -207,7 +207,7 @@ class Coletor:
             snap = self._calcular(stats) if mudou else self.snapshot
             if snap is not None:
                 snap.stats = dict(stats, duracao_s=time.perf_counter() - t0,
-                                  fim=datetime.now(), acompanhamento=acomp)
+                                  fim=agora(), acompanhamento=acomp)
                 if mudou:
                     self._registrar_historico(snap)
                 self.snapshot = snap
@@ -240,7 +240,7 @@ class Coletor:
         por_mun = projecao.resumir(df, proj, cand, ["uf", "mun"])
         por_mun.insert(0, "municipio", [self.nomes_mun.get(i, i[1]) for i in por_mun.index])
         return Snapshot(
-            momento=datetime.now(),
+            momento=agora(),
             candidatos=cand,
             nomes=dict(self._nomes),
             partidos=dict(self._partidos),

@@ -1,3 +1,4 @@
-# Usado pelo Streamlit Community Cloud. Instala o pacote `eleicao` (src/) e as dependências
-# declaradas no pyproject.toml. Localmente, use `poetry install`.
-.
+# Usado pelo Streamlit Community Cloud. Instala o pacote `eleicao` (src/) em modo editável,
+# para que cada push valha sem reinstalar, junto com as dependências do pyproject.toml.
+# Localmente, use `poetry install`.
+-e .

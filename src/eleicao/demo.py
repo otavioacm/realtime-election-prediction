@@ -10,12 +10,11 @@ import hashlib
 import json
 import re
 import time
-from datetime import datetime
 
 import httpx
 import numpy as np
 
-from .config import CARGO, ELEICAO, Config
+from .config import CARGO, ELEICAO, Config, agora
 
 CANDIDATOS = (("13", "LULA", "PT"), ("22", "FLAVIO BOLSONARO", "PL"))
 REGIAO = {**dict.fromkeys("al ba ce ma pb pe pi rn se".split(), (0.66, 0.15)),
@@ -127,8 +126,8 @@ class TransporteDemo(httpx.AsyncBaseTransport):
         etag = '"' + hashlib.md5(json.dumps(corpo, sort_keys=True).encode()).hexdigest() + '"'
         if request.headers.get("if-none-match") == etag:
             return httpx.Response(304, headers={"etag": etag}, request=request)
-        agora = datetime.now()
-        corpo = corpo | {"dg": f"{agora:%d/%m/%Y}", "hg": f"{agora:%H:%M:%S}"}
+        t = agora()
+        corpo = corpo | {"dg": f"{t:%d/%m/%Y}", "hg": f"{t:%H:%M:%S}"}
         return httpx.Response(200, json=corpo, headers={"etag": etag}, request=request)
 
     async def handle_async_request(self, request: httpx.Request) -> httpx.Response:

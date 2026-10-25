@@ -2,6 +2,8 @@
 
 import os
 from dataclasses import dataclass
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 # ambiente -> (host, ambiente, ciclo)
 AMBIENTES = {
@@ -13,6 +15,13 @@ AMBIENTES = {
 
 ELEICAO = "6258"  # 2º turno federal
 CARGO = "0001"  # presidente
+FUSO = ZoneInfo("America/Sao_Paulo")
+
+
+def agora() -> datetime:
+    """Horário de Brasília, sem fuso: o servidor publicado roda em UTC, e sem fuso o gráfico
+    mostra a mesma hora para qualquer visitante."""
+    return datetime.now(FUSO).replace(tzinfo=None)
 
 
 @dataclass(frozen=True)
