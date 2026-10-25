@@ -18,7 +18,7 @@ class Resultado:
     vb: int = 0  # brancos
     tvn: int = 0  # nulos
     votos: dict[str, int] = field(default_factory=dict)  # número do candidato -> votos apurados
-    gerado: str = ""  # "dd/mm/aaaa hh:mm:ss"
+    gerado: str = field(default="", compare=False)  # "dd/mm/aaaa hh:mm:ss"
 
     @property
     def finalizado(self) -> bool:
@@ -51,6 +51,10 @@ def parse_resultado(d: dict) -> Resultado:
     )
 
 
-def parse_acompanhamento(d: dict) -> dict[str, tuple[int, int]]:
-    """ab.json -> {abrangência: (seções, seções totalizadas)}, inclusive "br"."""
-    return {a["cdabr"]: (_int(a["s"]["ts"]), _int(a["s"]["st"])) for a in d.get("abr", [])}
+def parse_acompanhamento(d: dict) -> dict[str, tuple[int, int, int]]:
+    """ab.json -> {abrangência: (eleitorado, seções, seções totalizadas)}.
+
+    O da UF lista cada município (código de 5 dígitos) e a própria UF; o do Brasil, as UFs.
+    """
+    return {a["cdabr"]: (_int(a.get("e", {}).get("te")), _int(a["s"]["ts"]), _int(a["s"]["st"]))
+            for a in d.get("abr", [])}

@@ -39,16 +39,21 @@ das seções totalizadas). Unidades sem nenhuma seção totalizada herdam, com o
 a taxa votos/eleitor observada no município → UF → Brasil. Os percentuais são recalculados
 sobre os válidos projetados.
 
-## Desempenho
+## Coleta
 
-São ~6.300 arquivos por rodada completa (5.757 municípios; 190 deles com várias zonas
-viram 725 zonas). Com 8 requisições simultâneas em HTTP/2, ~70 s. Para não depender disso:
+O TSE limita acessos por IP (responde 429), então cada rodada é enxuta:
 
-- requisições condicionais (ETag → 304 sem corpo);
-- unidades 100% totalizadas deixam de ser consultadas;
-- o `ab.json` traz as seções totalizadas por UF: se a soma das nossas unidades da UF bate,
-  a UF inteira é pulada;
-- unidades maiores primeiro, e a projeção parcial é publicada a cada 10 s durante a rodada.
+- baixa o total do Brasil, o total de cada UF e o acompanhamento de cada UF (~57 arquivos,
+  quase sempre 304); o acompanhamento traz seções totalizadas e eleitorado de cada município;
+- baixa o resultado só dos municípios cujas seções totalizadas aumentaram (zonas, nas cidades
+  grandes), no máximo 1.000 por rodada, priorizando onde há mais eleitores apurados a incorporar;
+- ao receber 429/403 a rodada para e a seguinte espera de 1 a 5 min (aviso na tela).
+
+Os níveis do TSE não são publicados em sincronia (municípios atrasam em relação à UF; o
+exterior só aparece no total do Brasil). Para o total e por UF, cada UF é projetada pelos
+municípios quando eles cobrem 90% do que o total da UF já mostra; senão, pela regra de 3 no
+total da UF. O exterior é o total do Brasil menos as UFs. O "apurado" e as seções do topo vêm
+do total oficial do Brasil.
 
 Na tela, cada visitante confere a cada 5 s se há projeção nova e só redesenha a página quando
 há (~10 KB/min por pessoa sem mudança). Se o TSE ficar 4 min sem dado novo aparece um aviso,

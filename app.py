@@ -119,8 +119,21 @@ st.markdown("""
 
 # ---- blocos ----------------------------------------------------------------------------------
 
-def card(snap: Snapshot, linha: pd.Series, n: str, lider: bool) -> str:
-    proj, apu = linha[f"{n}_proj_pct"], linha[f"{n}_pct"]
+def oficial(snap: Snapshot, linha: pd.Series) -> tuple[float, dict, dict]:
+    """% de seções, votos e % apurados como o TSE divulga (total do Brasil); se o arquivo do
+    total ainda não veio, a soma das unidades."""
+    r = snap.oficial
+    if r is None or not r.ts:
+        return (linha["pct_secoes"], {n: linha[n] for n in snap.candidatos},
+                {n: linha[f"{n}_pct"] for n in snap.candidatos})
+    validos = sum(r.votos.values())
+    return (100 * r.st / r.ts, dict(r.votos),
+            {n: 100 * v / validos if validos else float("nan") for n, v in r.votos.items()})
+
+
+def card(snap: Snapshot, linha: pd.Series, n: str, lider: bool, votos_apu: dict,
+         pct_apu: dict) -> str:
+    proj, apu = linha[f"{n}_proj_pct"], pct_apu.get(n, float("nan"))
     img = FOTOS.get(n)
     return f"""
 <div class="cand" style="--cor:{CORES.get(n, CINZA)}; --p:{0 if pd.isna(proj) else proj:.2f}%">
@@ -130,7 +143,7 @@ def card(snap: Snapshot, linha: pd.Series, n: str, lider: bool) -> str:
   <div class="rot">Projeção</div>
   <div class="proj">{pct(proj)}</div>
   <div class="apu">Apurado <b>{pct(apu)}</b></div>
-  <div class="votos">{votos(linha[n])} votos</div>
+  <div class="votos">{votos(votos_apu.get(n, 0))} votos</div>
   <span class="chip"{'' if lider else ' style="visibility:hidden"'}>À frente na projeção</span>
 </div>"""
 
@@ -139,8 +152,10 @@ def topo(snap: Snapshot, linha: pd.Series) -> str:
     ordem = sorted(snap.candidatos,
                    key=lambda n: -(0 if pd.isna(linha[f"{n}_proj_pct"]) else linha[f"{n}_proj_pct"]))
     tem_proj = not pd.isna(linha[f"{ordem[0]}_proj_pct"])
-    secoes = 0 if pd.isna(linha["pct_secoes"]) else linha["pct_secoes"]
-    cards = "".join(card(snap, linha, n, tem_proj and i == 0) for i, n in enumerate(ordem))
+    secoes, votos_apu, pct_apu = oficial(snap, linha)
+    secoes = 0 if pd.isna(secoes) else secoes
+    cards = "".join(card(snap, linha, n, tem_proj and i == 0, votos_apu, pct_apu)
+                    for i, n in enumerate(ordem))
 
     if tem_proj and len(ordem) >= 2:
         a, b = ordem[:2]
@@ -240,6 +255,8 @@ def vigia(c: Coletor, versao_exibida: int | None) -> None:
     snap = c.snapshot
     if (snap.versao if snap else None) != versao_exibida:
         st.rerun()
+    if c.aviso:  # ex.: TSE limitando acessos; a coleta já está esperando para tentar de novo
+        st.warning(c.aviso, icon="⏳")
     ultima = c.ultima_atualizacao
     if ultima is None:
         return

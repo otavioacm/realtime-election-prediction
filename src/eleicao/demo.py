@@ -113,13 +113,26 @@ class TransporteDemo(httpx.AsyncBaseTransport):
             "v": {"vv": str(vv), "vb": str(s["vb"]), "tvn": str(s["tvn"])},
         }
 
-    def _acompanhamento(self) -> dict:
-        abr = []
-        for uf in sorted(set(self.ufs)):
-            s = self._somar(self.ufs == uf)
-            abr.append({"tpabr": "uf", "cdabr": uf, "s": {"ts": str(s["ts"]), "st": str(s["st"])}})
-        s = self._somar(np.ones(len(self.ufs), bool))
-        abr.append({"tpabr": "br", "cdabr": "br", "s": {"ts": str(s["ts"]), "st": str(s["st"])}})
+    def _acompanhamento(self, uf: str) -> dict | None:
+        """ab.json: do Brasil, uma linha por UF; de uma UF, uma por município mais a da UF."""
+        e = self._estado()
+        sel = np.ones(len(self.ufs), bool) if uf == "br" else self.ufs == uf
+        if not sel.any():
+            return None
+        grupos = self.ufs[sel] if uf == "br" else np.array([m[2:] for m in self.mun[sel]])
+        cods, inv = np.unique(grupos, return_inverse=True)
+        soma = {k: np.bincount(inv, weights=v[sel], minlength=len(cods)).astype(int)
+                for k, v in (("te", self.te), ("ts", self.ts), ("st", e["st"]), ("est", e["est"]))}
+
+        def linha(tp, cd, te, ts, st, est):
+            return {"tpabr": tp, "cdabr": cd, "s": {"ts": str(ts), "st": str(st)},
+                    "e": {"te": str(te), "est": str(est)}}
+
+        tp = "uf" if uf == "br" else "mun"
+        abr = [linha(tp, c, *(soma[k][i] for k in ("te", "ts", "st", "est")))
+               for i, c in enumerate(cods)]
+        abr.append(linha("br" if uf == "br" else "uf", uf,
+                         *(int(soma[k].sum()) for k in ("te", "ts", "st", "est"))))
         return {"ele": ELEICAO, "abr": abr}
 
     def _resposta(self, request: httpx.Request, corpo: dict) -> httpx.Response:
@@ -145,7 +158,10 @@ class TransporteDemo(httpx.AsyncBaseTransport):
             return httpx.Response(200, json=self._municipios, request=request)
         nome = url.rsplit("/", 1)[-1]
         if nome.endswith("-ab.json"):
-            return self._resposta(request, self._acompanhamento())
+            corpo = self._acompanhamento(nome.split("-")[0])
+            if corpo is None:
+                return httpx.Response(404, request=request)
+            return self._resposta(request, corpo)
         m = _NOME.match(nome)
         if not m:
             return httpx.Response(404, request=request)

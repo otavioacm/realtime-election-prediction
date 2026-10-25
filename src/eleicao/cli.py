@@ -4,7 +4,7 @@ import argparse
 import asyncio
 import logging
 
-from .coletor import Coletor
+from .coletor import Coletor, LimiteTSE
 from .config import AMBIENTES, Config
 
 
@@ -15,8 +15,10 @@ def _imprimir(coletor: Coletor) -> None:
         return
     s = snap.stats
     print(f"[{s['fim']:%H:%M:%S}] {s['duracao_s']:.1f}s | req={s['requisicoes']} "
-          f"200={s.get(200, 0)} 304={s.get(304, 0)} 404={s.get(404, 0)} erro={s.get('erro', 0)} "
-          f"ufs_puladas={s.get('ufs_puladas', 0)} sem_arquivo={s['sem_arquivo']}")
+          f"ab 200/304={s.get('ab_200', 0)}/{s.get('ab_304', 0)} "
+          f"resultados 200/304={s.get(200, 0)}/{s.get(304, 0)} novos={s.get('novos', 0)} "
+          f"adiados={s.get('adiados', 0)} erro={s.get('erro', 0)}"
+          + (f" | {coletor.erro}" if coletor.erro else ""))
     linha = snap.total.iloc[0]
     partes = [f"{snap.nomes.get(n, n)}: {linha[f'{n}_pct']:.2f}% -> {linha[f'{n}_proj_pct']:.2f}%"
               for n in snap.candidatos]
@@ -27,7 +29,11 @@ async def _rodar(config: Config, rodadas: int) -> None:
     coletor = Coletor(config)
     async with coletor.cliente() as cli:
         for i in range(rodadas):
-            await coletor.rodada(cli)
+            try:
+                await coletor.rodada(cli)
+                coletor.erro = None
+            except LimiteTSE as exc:
+                coletor.erro = f"TSE limitando acessos ({exc})"
             _imprimir(coletor)
             if i < rodadas - 1:
                 await asyncio.sleep(config.intervalo_s)

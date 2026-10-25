@@ -53,8 +53,9 @@ class Config:
     def url_municipios(self) -> str:
         return f"{self.base}/config/mun-{self._e}-cm.json"
 
-    def url_acompanhamento(self) -> str:
-        return f"{self.base}/dados/br/br-{self._e}-ab.json"
+    def url_acompanhamento(self, uf: str = "br") -> str:
+        """Acompanhamento (ab.json): seções/eleitorado por UF (br) ou por município (de uma UF)."""
+        return f"{self.base}/dados/{uf}/{uf}-{self._e}-ab.json"
 
     def url_resultado(self, uf: str, mun: str = "", zona: str = "") -> str:
         """Resultado unificado (-u.json) de BR, UF, município ou zona."""

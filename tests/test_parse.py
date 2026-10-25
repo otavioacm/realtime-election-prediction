@@ -27,4 +27,4 @@ def test_parse_numeros_como_string_e_vazios():
 def test_parse_acompanhamento():
     d = {"abr": [{"cdabr": "sp", "s": {"ts": "100", "st": "40"}},
                  {"cdabr": "br", "s": {"ts": "500", "st": "40"}}]}
-    assert parse_acompanhamento(d) == {"sp": (100, 40), "br": (500, 40)}
+    assert parse_acompanhamento(d) == {"sp": (0, 100, 40), "br": (0, 500, 40)}
