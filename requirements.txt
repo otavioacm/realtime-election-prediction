@@ -1,0 +1,3 @@
+# Usado pelo Streamlit Community Cloud. Instala o pacote `eleicao` (src/) e as dependências
+# declaradas no pyproject.toml. Localmente, use `poetry install`.
+.

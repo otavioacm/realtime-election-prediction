@@ -60,3 +60,14 @@ O histórico de projeções vai para `data/historico-<fonte>.csv` e é recarrega
 - `src/eleicao/coletor.py`: rodadas assíncronas em segundo plano
 - `src/eleicao/demo.py`: simulador da API do TSE
 - `app.py`: interface Streamlit
+
+## Publicação (Streamlit Community Cloud)
+
+1. Em <https://share.streamlit.io>, entre com a conta do GitHub dona do repositório.
+2. **Create app** → repositório `otavioacm/realtime-election-prediction`, branch `main`,
+   arquivo `app.py`. Em **Advanced settings**, Python 3.13.
+3. O Cloud instala o `requirements.txt` (que instala este pacote) e lê `.streamlit/config.toml`.
+
+Todas as pessoas que abrem o link compartilham uma única coleta no servidor, então o número
+de acessos não aumenta as requisições ao TSE. O histórico do gráfico (`data/`) se perde se o
+app reiniciar.
