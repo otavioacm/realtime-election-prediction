@@ -146,3 +146,37 @@ def test_municipios_atrasados_usam_o_total_da_uf():
     assert stats[1]["ufs_pelo_total"] == 2
     assert total["13"] == tr._somar(tr.ufs == tr.ufs)["13"]  # apurado = total oficial
     assert total["13_proj_pct"] > 0
+
+
+def test_uf_passa_para_municipios_e_nao_volta():
+    class Alternavel(httpx.AsyncBaseTransport):
+        def __init__(self, interno):
+            self.interno, self.parados = interno, True
+
+        async def handle_async_request(self, request):
+            if self.parados and re.search(r"/[a-z]{2}\d{5}", str(request.url)):
+                return httpx.Response(404, request=request)
+            return await self.interno.handle_async_request(request)
+
+    agora = [0.0]
+    cfg = Config(ambiente="demo")
+    tr = Alternavel(TransporteDemo(cfg, duracao_s=100, municipios=MUNICIPIOS,
+                                   relogio=lambda: agora[0]))
+    c = Coletor(cfg, transport=tr, pasta_dados=None)
+
+    async def main():
+        stats = []
+        async with c.cliente() as cli:
+            for t, parados in ((0, True), (40, True), (41, False), (42, True)):
+                agora[0], tr.parados = t, parados
+                if parados:  # esquece os municípios: como se os arquivos tivessem ficado para trás
+                    c._estado = {k: v for k, v in c._estado.items() if not k[1]}
+                stats.append(await c.rodada(cli))
+        return stats
+
+    stats = asyncio.run(main())
+    assert stats[1]["ufs_pelo_total"] == 2  # municípios parados: pelo total da UF
+    assert stats[2]["ufs_pelo_total"] == 0  # alcançaram: por município
+    assert c._ufs_por_municipio == {"sp", "ba"}
+    assert "ufs_pelo_total" in stats[3]  # houve recálculo na última rodada
+    assert stats[3]["ufs_pelo_total"] == 0  # municípios zerados de novo, mas não volta

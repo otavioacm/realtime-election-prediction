@@ -15,9 +15,10 @@ e sem votos, e recebem a taxa do nível acima (fallback).
 
 O TSE não publica os níveis em sincronia: os arquivos de município costumam atrasar em relação
 ao da UF, e o exterior só aparece no total do Brasil. Por isso, para o total e por UF, cada UF é
-projetada pelos municípios quando eles cobrem pelo menos `COBERTURA_MIN` do que o arquivo da
-UF já mostra; senão, pela regra de 3 no próprio total da UF. O exterior é o total do Brasil
-menos as UFs. A tabela por município usa sempre os arquivos de município.
+projetada pela regra de 3 no próprio total da UF até os municípios cobrirem `COBERTURA_MIN`
+do que o arquivo da UF já mostra; a partir daí, sempre pelos municípios (a troca não volta,
+para a projeção não pular a cada rodada com o vaivém dos arquivos). O exterior é o total do
+Brasil menos as UFs. A tabela por município usa sempre os arquivos de município.
 """
 
 import asyncio
@@ -42,7 +43,7 @@ PARCIAL_S = 10  # durante uma rodada longa, publica a projeção parcial nesse i
 ORCAMENTO = 1000  # máximo de arquivos de resultado por rodada
 ESPERA_LIMITE_S = 60  # primeira espera depois de um 429; dobra a cada repetição, até 5 min
 ESPERA_LIMITE_MAX_S = 300
-COBERTURA_MIN = 0.9  # fração do eleitorado apurado da UF que os municípios precisam cobrir
+COBERTURA_MIN = 0.5  # fração do eleitorado apurado da UF que os municípios precisam cobrir
 EXTERIOR = "zz"
 
 Chave = tuple[str, str, str]  # (uf, município, zona); zona "" = município inteiro; ("br", "", "") = Brasil
@@ -96,6 +97,7 @@ class Coletor:
         self._versao = 0
         self._limites_seguidos = 0
         self._bloqueado: LimiteTSE | None = None
+        self._ufs_por_municipio: set[str] = set()  # UFs que já passaram a ser projetadas por município
 
         self._arquivo_hist = None
         if pasta_dados is not None and config.ambiente != "demo":
@@ -386,15 +388,19 @@ class Coletor:
             if resto.est > (atual.est if atual else 0) and min(resto.votos.values(), default=0) >= 0:
                 totais[EXTERIOR] = resto
 
-        linhas = []
+        linhas, pelo_total = [], 0
         for uf, grupo in df_mun.groupby("uf", sort=False):
             r = totais.get(uf)
-            if r is not None and r.est > 0 and grupo["est"].sum() < COBERTURA_MIN * r.est:
-                # municípios atrasados em relação à UF: projeta a UF pelo total dela
+            if (uf not in self._ufs_por_municipio and r is not None and r.est > 0
+                    and grupo["est"].sum() < COBERTURA_MIN * r.est):
+                # municípios ainda muito atrás da UF: projeta a UF pelo total dela
                 linhas.append(linha(uf, r, te=int(grupo["te"].sum()), ts=int(grupo["ts"].sum())))
-                stats["ufs_pelo_total"] += 1
+                pelo_total += 1
             else:
+                if r is not None and r.est > 0:
+                    self._ufs_por_municipio.add(uf)
                 linhas += grupo.to_dict("records")
+        stats["ufs_pelo_total"] = pelo_total
         return linhas
 
     # ---- histórico ---------------------------------------------------------------------------
